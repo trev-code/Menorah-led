@@ -3,11 +3,9 @@
 A menorah made from **nine NeoPixel RGBW LED strips** (8 LEDs each): **8 candles + 1 shamash**.  
 Built around an **Adafruit KB2040 / Keybow 2040-class board** (or any microcontroller with ≥9 GPIO and I2C), with an **APDS-9960 gesture sensor** for night selection, lighting, and brightness control.
 
-> **Safety note:** This is an *LED* menorah, not an open-flame device. Don’t leave it unattended if you mount it near flammable decorations, and ensure your USB power source and wiring are appropriate for the current draw.
-
 ---
 
-## Background (Hanukkah rules the build follows)
+## Background
 
 A menorah has **8 candles + 1 shamash = 9 total**.
 
@@ -20,24 +18,24 @@ This project models a “burn down” animation so the candles appear to melt do
 
 ---
 
-## Demo Behavior (What it does)
+## Behavior (What it does)
 
 ### Phase 1 — Select night (1–8)
 - The **shamash strip** displays the currently selected night by lighting **N LEDs**.
 - Gestures:
-  - **UP:** increase night (wraps 8 → 1)
-  - **DOWN:** decrease night (wraps 1 → 8)
-  - **RIGHT:** confirm selection and move to Phase 2
+  - **RIGHT:** increase night (wraps 8 → 1)
+  - **LEFT:** decrease night (wraps 1 → 8)
+  - **DOWN:** confirm selection and move to Phase 2
 
 ### Phase 2 — Light candles
 - Shamash lights immediately on entering Phase 2.
-- Swipe **UP or DOWN** to light the next candle (rate-limited to ~1 per second).
-- Optional: light order can be reversed in code.
+- Swipe **LEFT or RIGHT** to light the next candle (rate-limited to ~1 per second).
+- Optional: light direction can be reversed in code.
 
 ### Phase 3 — Burning
 - Candles flicker with a layered flame animation.
 - Each candle has a randomized burn duration (defaults to ~40 minutes + up to 10% variation).
-- **UP / DOWN gestures change global brightness** while burning.
+- **LEFT / RIGHT gestures change global brightness** while burning.
 - Burn-down effect reduces the “wax” LED stack over time and eventually leaves a single blue “ember” LED.
 
 ### Phase 4 — (Placeholder)
@@ -75,6 +73,8 @@ You will be building **9 independent NeoPixel outputs**:
 3. Label the back of strips (Night 1..8, Shamash) before assembly.
 
 ### Board + strip mapping (as coded)
+Before you solder the microcontroller to the protoboard, solder the USB+RAW bridge on the underside of the KB2040.
+This will ensure the strips are safely pulling power directly from the USB port.
 The code expects the shamash on `D6`, and candles on these pins in *night order*:
 
 - **Shamash:** `D6`
@@ -90,9 +90,11 @@ The code expects the shamash on `D6`, and candles on these pins in *night order*
 > This mapping is intentionally “physical-layout friendly” in the build, even if it looks non-sequential.
 
 ### Power & ground
+- Wire RAW pin to the 5V rail of the protoboard and install a jumper to provide power to the other side.
+- Tie Gnd pins to gnd rails of the protoboard.
 - Tie all strip **5V** together and all **GND** together on the protoboard.
 - Add power/ground jumpers as needed.
-- Trim and inspect underside wires so nothing shorts against the case.
+- Trim and inspect underside wires so nothing shorts.
 
 ### Bundle + strain relief
 - Bend strip leads toward a central trunk and secure with a **zip tie** before final closing.
@@ -137,7 +139,7 @@ All the main knobs are at the top of the file:
 - **Candle geometry (per strip)**
   - `LEDS_PER_STRIP` (should be 8)
   - `CANDLE_BASE_LEDS`
-  - `FLAME_START_LEDS`
+  - `FLAME_START_LEDS` changing these may cause weird behavior
   - `FLAME_MAX_LEDS`
 
 - **Color**
@@ -146,7 +148,7 @@ All the main knobs are at the top of the file:
   - `FLAME_COLORS` / `FLAME_COLOR_WHITE` (flicker palette)
 
 - **Behavior toggles**
-  - `LIGHTING_REVERSE_ORDER` (true = light from far side back toward shamash)
+  - `LIGHTING_REVERSE_ORDER` (true = light from other side first)
   - `ANIMATION_OPTION` (1–9)
   - `TEST_MODE` (true = skip phases and burn all candles for animation testing)
 
@@ -192,11 +194,11 @@ Recommended workflow:
 ## Usage Instructions
 
 1. Plug in via USB-C.
-2. **Select night** (1–8) using gestures (UP/DOWN), then confirm with RIGHT.
-3. Shamash lights on entry to lighting.
-4. Swipe UP/DOWN to light each candle sequentially.
-5. Candles animate and “burn down” over the runtime.
-6. During burning, swipe UP/DOWN to change brightness.
+2. **Select night** (1–8) using gestures (LEFT/RIGHT), then confirm with DOWN.
+3. Shamash lights on entry to lighting phase.
+4. Swipe either direction to light each candle sequentially.
+5. Candles animate and “burn down” over the runtime, once all candles are lit.
+6. During burning, swipe LEFT/RIGHT to change brightness.
 
 ---
 
@@ -221,8 +223,20 @@ Recommended workflow:
 ### Power resets / instability
 - 9 strips × 8 pixels = 72 RGBW pixels total.
 - Reduce brightness and confirm your USB power supply can handle the load.
+- In testing power draw was maximum ~2W
 
 ---
 
-## Project Structure (suggested)
+
+---
+
+## License
+MIT (see SPDX header in source).
+
+---
+
+## Credits
+Built by Trevor Hoffman (Dec 2025).  
+NeoPixel control via CircuitPython `neopixel`, and gesture input via `adafruit_apds9960`.
+
 
