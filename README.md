@@ -2,7 +2,11 @@
 
 A menorah made from **nine NeoPixel RGBW LED strips** (8 LEDs each): **8 candles + 1 shamash**.  
 Built around an **Adafruit KB2040 / Keybow 2040-class board** (or any microcontroller with ≥9 GPIO and I2C), with an **APDS-9960 gesture sensor** for night selection, lighting, and brightness control.
+---
+<img width="2151" height="1619" alt="image" src="https://github.com/user-attachments/assets/b83d24cb-45f4-48f9-acff-d5a76ee948ea" />
 
+
+some video: https://photos.app.goo.gl/8cVjn73NWGYfXF416
 ---
 
 ## Background
@@ -40,9 +44,11 @@ This project models a “burn down” animation so the candles appear to melt do
 
 ### Phase 4 — (Placeholder)
 - Currently keeps the display as-is after burn out.
+- Re-plug or press reset to start again.
 
 ---
-
+<img width="922" height="1444" alt="image" src="https://github.com/user-attachments/assets/dda85477-0583-4842-8c90-171026e9e0b2" />
+---
 ## Materials
 
 ### Electronics
@@ -71,6 +77,8 @@ You will be building **9 independent NeoPixel outputs**:
 1. Solder wire leads to **5V**, **GND**, and **DATA IN** on each strip.
 2. Keep wires **uniform length** to simplify routing and strain relief.
 3. Label the back of strips (Night 1..8, Shamash) before assembly.
+<img width="2151" height="1619" alt="image" src="https://github.com/user-attachments/assets/2f8194c6-27e6-4559-a514-8585cb6fcca1" />
+
 
 ### Board + strip mapping (as coded)
 Before you solder the microcontroller to the protoboard, solder the USB+RAW bridge on the underside of the KB2040.
