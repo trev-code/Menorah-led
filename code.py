@@ -28,16 +28,16 @@ import math
 # Key settings - see line references for usage locations
 
 # Candle Burn Duration (~line 365-366, 722, 887)
-CANDLE_DURATION_MIN = 40  # Minutes (e.g., 45 for ~40 min runtime)
+CANDLE_DURATION_MIN = 2  # Minutes (e.g., 45 for ~40 min runtime)
 CANDLE_DURATION_VARIATION = 0.10  # Random variation: min + random(0, variation) * min
 
 # Default Candle Color (~line 267, 287) - Format: (G, R, B, W) GRBW order
 CANDLE_BASE_COLOR = (10, 10, 255, 10)  # Blue candle base
-CANDLE_BASE_BRIGHTNESS = 0.80  # Brightness 0.0-1.0
+CANDLE_BASE_BRIGHTNESS = 0.80  # Relative brightness to the flame 0.0-1.0
 
 # Default Brightness Settings (~line 84, 746, 950, 971, 989, 993)
 MENORAH_BRIGHTNESS_LEVELS = [0.01, 0.06, 0.20, 0.50, 0.99]  # 1%, 6%, 20%, 50%, 99%
-menorah_brightness_index = 1  # Current level index
+menorah_brightness_index = 2  # Current level index
 
 # Flame Brightness (~line 221, 223, 692, 693, 726, 727, 850, 893, 894)
 FLAME_START_BRIGHTNESS = 0.50  # Initial brightness 0.0-1.0
@@ -72,7 +72,7 @@ FLAME_MAX_LEDS = 5      # Maximum number of LEDs flame can grow to
 # ----------------------------------------------------------------
 
 # Test Mode Configuration (~line 401-402, 863, 913)
-TEST_MODE = False  # If True, skip to phase 3 with all 9 candles burning
+TEST_MODE = True  # If True, skip to phase 3 with all 9 candles burning
 ANIMATION_OPTION = 6  # Animation option to test (1-9, see ~line 440-544 for animation definitions)
 
 # Phase 2 (Lighting) Configuration
@@ -81,9 +81,9 @@ LIGHTING_REVERSE_ORDER = True  # Light candles in reverse order
 
 # Flame Color Palette (~line 310-313) - Format: (G, R, B, W) GRBW order
 FLAME_COLOR_RED = (5, 255, 5, 50)
-FLAME_COLOR_ORANGE = (50, 255, 5, 80)
-FLAME_COLOR_YELLOW = (100, 255, 5, 120)
-FLAME_COLOR_WHITE = (5, 150, 5, 200)  # White flicker layer
+FLAME_COLOR_ORANGE = (30, 255, 5, 80)
+FLAME_COLOR_YELLOW = (70, 255, 5, 120)
+FLAME_COLOR_WHITE = (100, 150, 50, 255)  # White flicker layer
 FLAME_COLORS = [FLAME_COLOR_RED, FLAME_COLOR_ORANGE, FLAME_COLOR_YELLOW]
 
 # Animation Speed Configuration (~line 411-412)
@@ -159,6 +159,7 @@ class CandleState:
         self.animation_speed = 1.0  # Per-candle speed multiplier
         self.animation_phase_offset = random.uniform(0, math.pi * 2)  # Random phase offset
         self.flame_led_brightness = [1.0] * FLAME_MAX_LEDS  # Per-LED brightness for upward traveling effects
+        self.candle_base_led_brightness = [1.0] * CANDLE_BASE_LEDS  # Per-LED brightness for candle base (dimmer than flame)
 
 # Initialize candle states (8 regular candles + 1 shamash = 9 total)
 candle_states = [CandleState() for _ in range(NUM_CANDLES + 1)]  # +1 for shamash
@@ -213,18 +214,22 @@ def update_candle_display(candle_index, brightness_scale=1.0):
         return
     
     # Candle is lit - show candle base and flame
-    # Candle base (bottom LEDs, static color)
+    # Candle base (bottom LEDs, static color) - dimmer than flame
     r, g, b, w = CANDLE_BASE_COLOR
-    base_scale = CANDLE_BASE_BRIGHTNESS * brightness_scale
-    base_color = (
-        int(r * base_scale),
-        int(g * base_scale),
-        int(b * base_scale),
-        int(w * base_scale)
-    )
+    base_brightness_mult = CANDLE_BASE_BRIGHTNESS * 0.4  # Candle base is 40% of flame brightness
+    base_scale = base_brightness_mult * brightness_scale
     
-    # Place candle base at bottom (LEDs 0 to candle_base_leds-1)
+    # Place candle base at bottom (LEDs 0 to candle_base_leds-1) with per-LED brightness
     for i in range(min(state.candle_base_leds, LEDS_PER_STRIP)):
+        # Apply per-LED brightness multiplier (if available)
+        led_brightness = state.candle_base_led_brightness[i] if i < len(state.candle_base_led_brightness) else 1.0
+        led_scale = base_scale * led_brightness
+        base_color = (
+            int(r * led_scale),
+            int(g * led_scale),
+            int(b * led_scale),
+            int(w * led_scale)
+        )
         strip[i] = base_color
     
     # Flame (top LEDs, animated) - starts right above candle base (no gap)
@@ -275,12 +280,45 @@ def calculate_candle_duration():
     variation_amount = random.uniform(0, CANDLE_DURATION_VARIATION) * CANDLE_DURATION_MIN
     return CANDLE_DURATION_MIN + variation_amount
 
+def calculate_intensity_curve(burn_progress):
+    """Calculate intensity curve: tame start, peak at 80%, then simmer down.
+    
+    Args:
+        burn_progress: Burn progress 0.0 to 1.0
+    
+    Returns:
+        Intensity multiplier 0.0 to 1.0
+    """
+    if burn_progress <= 0.0:
+        return 0.3  # Start tame (30% intensity)
+    elif burn_progress >= 1.0:
+        return 0.0  # Completely burned out
+    
+    # Peak at 80% (0.8) of burn time
+    peak_position = 0.8
+    
+    if burn_progress <= peak_position:
+        # Ramp up from 0.3 to 1.0 over 0.0 to 0.8
+        # Use smooth curve (ease-in)
+        normalized = burn_progress / peak_position  # 0.0 to 1.0
+        # Ease-in curve: x^2 for smooth acceleration
+        intensity = 0.3 + (1.0 - 0.3) * (normalized ** 1.5)
+    else:
+        # Ramp down from 1.0 to 0.0 over 0.8 to 1.0
+        # Use smooth curve (ease-out)
+        normalized = (burn_progress - peak_position) / (1.0 - peak_position)  # 0.0 to 1.0
+        # Ease-out curve: 1 - (1-x)^2 for smooth deceleration
+        intensity = 1.0 - (normalized ** 1.5)
+    
+    return max(0.0, min(1.0, intensity))
+
 def update_flame_animation(candle_index, frame):
     """Update flame animation with upward traveling effects.
     
     Nine animation options (1-9): slow wave, fast pulse, random bursts, ripple,
     double wave, chaotic flicker, steady flow, spiral, multi-layer.
-    All include color cycling (reds/oranges/yellows) and white flicker.
+    Base flame height: 3 LEDs, brightness tapers 50% (1.0 to 0.5).
+    Animations can vary flame height above/below 3 LEDs.
     
     Args:
         candle_index: Candle index (0-7 regular, 8 shamash)
@@ -293,8 +331,13 @@ def update_flame_animation(candle_index, frame):
     if not state.lit:
         return
     
-    # Select animation option (test mode uses ANIMATION_OPTION, otherwise option 1)
-    option = ANIMATION_OPTION if TEST_MODE else 1
+    # Select animation option
+    # Test mode: Each candle displays a different animation (candle 0 = option 1, candle 1 = option 2, etc.)
+    # Normal mode: All candles use ANIMATION_OPTION
+    if TEST_MODE:
+        option = (candle_index % 9) + 1  # Cycle through options 1-9 for each candle
+    else:
+        option = ANIMATION_OPTION
     
     # Initialize animation speed and phase offset if needed
     if not hasattr(state, 'animation_speed') or state.animation_speed == 1.0:
@@ -303,147 +346,239 @@ def update_flame_animation(candle_index, frame):
     if not hasattr(state, 'animation_phase_offset'):
         state.animation_phase_offset = random.uniform(0, math.pi * 2)
     
+    # Calculate intensity curve based on burn progress
+    # For phase 2 (not burning yet), use low intensity (just lit)
+    if state.burn_start_time is None:
+        intensity_mult = 0.3  # Just lit, tame intensity
+        burn_progress = 0.0
+    else:
+        current_time = time.monotonic()
+        elapsed_minutes = (current_time - state.burn_start_time) / 60.0
+        burn_progress = elapsed_minutes / state.duration_minutes if state.duration_minutes > 0 else 1.0
+        intensity_mult = calculate_intensity_curve(burn_progress)
+    
     animated_frame = frame * state.animation_speed
     
-    # Color cycling (reds/oranges/yellows) - each candle cycles at slightly different speed
-    color_speed = (0.05 + (candle_index * 0.01)) * state.animation_speed
-    color_phase = (animated_frame * color_speed + candle_index * 0.5 + state.animation_phase_offset) % (len(FLAME_COLORS) * 2)
+    # Color cycling (reds/oranges/yellows) - smooth, slow transitions
+    color_speed = 0.03 * state.animation_speed  # Slower, smoother color transitions
+    color_phase = (animated_frame * color_speed + candle_index * 0.3 + state.animation_phase_offset) % (len(FLAME_COLORS) * 2)
     state.flame_color_index = color_phase / 2.0
     state.flame_color_mix = (color_phase % 2.0) / 2.0
     
-    # White flicker layer with randomness for non-periodic behavior
-    white_flicker1 = 0.3 * math.sin(animated_frame * 0.25 + candle_index * 0.4 + state.animation_phase_offset)
-    white_flicker2 = 0.2 * math.sin(animated_frame * 0.5 + candle_index * 0.6 + state.animation_phase_offset * 1.3)
-    white_random = random.uniform(-0.05, 0.05)
-    state.white_flicker = max(0.0, min(0.4, white_flicker1 + white_flicker2 + 0.1 + white_random))
+    # Smooth white flicker - multiple sine waves for realistic randomness
+    # Use smoother, lower frequency waves for more natural flicker
+    flicker_base = 0.15  # Base flicker amount
+    flicker1 = 0.12 * math.sin(animated_frame * 0.08 + candle_index * 0.3 + state.animation_phase_offset)
+    flicker2 = 0.08 * math.sin(animated_frame * 0.15 + candle_index * 0.5 + state.animation_phase_offset * 1.7)
+    flicker3 = 0.05 * math.sin(animated_frame * 0.25 + candle_index * 0.7 + state.animation_phase_offset * 2.3)
+    # Add very small random component for subtle variation (smoother than before)
+    white_random = random.uniform(-0.02, 0.02)
+    state.white_flicker = max(0.0, min(0.35, flicker_base + flicker1 + flicker2 + flicker3 + white_random))
     
-    # Initialize per-LED brightness array if needed
-    num_leds = int(state.flame_leds)
-    if len(state.flame_led_brightness) < num_leds:
-        state.flame_led_brightness.extend([1.0] * (num_leds - len(state.flame_led_brightness)))
+    # Base flame height: 3 LEDs (can vary with animation)
+    BASE_FLAME_HEIGHT = 3
     
-    # Set base brightness and LED count
-    state.flame_brightness = state.base_flame_brightness
-    state.flame_leds = int(state.base_flame_leds)
+    # Apply intensity curve to base brightness
+    state.flame_brightness = FLAME_START_BRIGHTNESS * intensity_mult
     
-    # Option 1: Slow upward wave - smooth sine wave traveling upward
+    # Initialize per-LED brightness array if needed (use max possible height)
+    max_flame_height = FLAME_MAX_LEDS + 1  # Allow going slightly above max
+    if len(state.flame_led_brightness) < max_flame_height:
+        state.flame_led_brightness.extend([1.0] * (max_flame_height - len(state.flame_led_brightness)))
+    
+    # Option 1: Smooth upward wave - gentle sine wave traveling upward
     if option == 1:
-        wave_speed = 0.15 * state.animation_speed
-        wave_position = (animated_frame * wave_speed + state.animation_phase_offset) % (num_leds * 2)
-        for i in range(num_leds):
-            # Wave travels upward, brightest at wave peak
-            wave_phase = (wave_position - i * 2) % (num_leds * 2)
-            brightness_mult = 0.7 + 0.3 * math.sin(wave_phase * math.pi / num_leds)
-            state.flame_led_brightness[i] = max(0.5, min(1.3, brightness_mult))
+        wave_speed = 0.12 * state.animation_speed
+        wave_position = (animated_frame * wave_speed + state.animation_phase_offset) % (BASE_FLAME_HEIGHT * 2.5)
+        # Flame height varies: base 3, can dip to 2 or rise to 4
+        height_variation = 1.0 * math.sin(animated_frame * 0.1 + state.animation_phase_offset)
+        flame_height = int(BASE_FLAME_HEIGHT + height_variation + 0.5)  # +0.5 for proper rounding
+        flame_height = max(2, min(4, flame_height))  # Range: 2-4 LEDs
+        state.flame_leds = flame_height
+        
+        for i in range(flame_height):
+            # Brightness tapers 50%: 1.0 at bottom to 0.5 at top
+            base_brightness = 1.0 - (i * 0.5 / max(1, flame_height - 1))
+            wave_phase = (wave_position - i * 2.2) % (BASE_FLAME_HEIGHT * 2.5)
+            wave_variation = 0.1 * math.sin(wave_phase * math.pi / (BASE_FLAME_HEIGHT * 1.25))
+            state.flame_led_brightness[i] = max(0.4, min(1.1, base_brightness + wave_variation))
     
-    # Option 2: Fast upward pulse - quick bright pulses traveling upward
+    # Option 2: Smooth upward pulse - gentle bright pulses traveling upward
     elif option == 2:
-        pulse_speed = 0.4 * state.animation_speed
-        pulse_position = (animated_frame * pulse_speed + state.animation_phase_offset) % (num_leds * 3)
-        for i in range(num_leds):
-            pulse_phase = (pulse_position - i * 3) % (num_leds * 3)
-            # Sharp pulse peak
-            if pulse_phase < 2:
-                brightness_mult = 0.6 + 0.5 * (1.0 - abs(pulse_phase - 1.0))
-            else:
-                brightness_mult = 0.6
-            state.flame_led_brightness[i] = max(0.5, min(1.4, brightness_mult))
+        pulse_speed = 0.25 * state.animation_speed
+        pulse_position = (animated_frame * pulse_speed + state.animation_phase_offset) % (BASE_FLAME_HEIGHT * 4)
+        # Flame height pulses: base 3, can dip to 2 or rise to 5
+        height_pulse = 2.0 * math.sin(animated_frame * 0.15 + state.animation_phase_offset)
+        flame_height = int(BASE_FLAME_HEIGHT + height_pulse + 0.5)  # +0.5 for proper rounding
+        flame_height = max(2, min(5, flame_height))  # Range: 2-5 LEDs
+        state.flame_leds = flame_height
+        
+        for i in range(flame_height):
+            # Brightness tapers 50%: 1.0 at bottom to 0.5 at top
+            base_brightness = 1.0 - (i * 0.5 / max(1, flame_height - 1))
+            pulse_phase = (pulse_position - i * 3.5) % (BASE_FLAME_HEIGHT * 4)
+            pulse_variation = 0.15 * math.sin(pulse_phase * math.pi / (BASE_FLAME_HEIGHT * 2))
+            state.flame_led_brightness[i] = max(0.4, min(1.15, base_brightness + max(0, pulse_variation)))
     
-    # Option 3: Random upward bursts - random bright spots moving upward
+    # Option 3: Smooth random bursts - gentle bright spots moving upward
     elif option == 3:
         if not hasattr(state, '_burst_positions'):
             state._burst_positions = []
-        if frame % 15 == 0:  # Spawn new burst occasionally
-            if random.random() < 0.3:  # 30% chance
+        if frame % 25 == 0:  # Spawn new burst less frequently
+            if random.random() < 0.2:  # 20% chance
                 state._burst_positions.append(0.0)  # Start at bottom
         # Update and remove old bursts
         new_bursts = []
         for burst_pos in state._burst_positions:
-            burst_pos += 0.3 * state.animation_speed
-            if burst_pos < num_leds + 1:
+            burst_pos += 0.18 * state.animation_speed  # Slower movement
+            if burst_pos < BASE_FLAME_HEIGHT + 3:
                 new_bursts.append(burst_pos)
         state._burst_positions = new_bursts
-        # Apply bursts to LEDs
-        for i in range(num_leds):
-            brightness_mult = 0.7
+        # Flame height varies with bursts: base 3, can dip to 2 or rise to 4
+        height_boost = 0.0
+        for burst_pos in state._burst_positions:
+            if burst_pos < BASE_FLAME_HEIGHT:
+                height_boost += 0.8
+        # Also add base variation
+        base_variation = 0.5 * math.sin(animated_frame * 0.08 + state.animation_phase_offset)
+        flame_height = int(BASE_FLAME_HEIGHT + height_boost + base_variation + 0.5)
+        flame_height = max(2, min(4, flame_height))  # Range: 2-4 LEDs
+        state.flame_leds = flame_height
+        
+        # Apply bursts with smooth falloff
+        for i in range(flame_height):
+            # Brightness tapers 50%: 1.0 at bottom to 0.5 at top
+            base_brightness = 1.0 - (i * 0.5 / max(1, flame_height - 1))
+            burst_boost = 0.0
             for burst_pos in state._burst_positions:
                 distance = abs(i - burst_pos)
                 if distance < 1.5:
-                    brightness_mult += 0.4 * (1.0 - distance / 1.5)
-            state.flame_led_brightness[i] = max(0.6, min(1.5, brightness_mult))
+                    burst_boost += 0.2 * (0.5 + 0.5 * math.cos(distance * math.pi / 1.5))
+            state.flame_led_brightness[i] = max(0.4, min(1.2, base_brightness + burst_boost))
     
     # Option 4: Smooth upward ripple - gentle wave with multiple peaks
     elif option == 4:
-        ripple_speed = 0.12 * state.animation_speed
-        ripple_position = (animated_frame * ripple_speed + state.animation_phase_offset) % (num_leds * 4)
-        for i in range(num_leds):
-            ripple_phase = (ripple_position - i * 4) % (num_leds * 4)
-            brightness_mult = 0.75 + 0.25 * math.sin(ripple_phase * math.pi / (num_leds * 2))
-            state.flame_led_brightness[i] = max(0.65, min(1.2, brightness_mult))
+        ripple_speed = 0.1 * state.animation_speed
+        ripple_position = (animated_frame * ripple_speed + state.animation_phase_offset) % (BASE_FLAME_HEIGHT * 5)
+        # Flame height ripples: base 3, can dip to 2 or rise to 4
+        height_ripple = 1.0 * math.sin(animated_frame * 0.08 + state.animation_phase_offset)
+        flame_height = int(BASE_FLAME_HEIGHT + height_ripple + 0.5)  # +0.5 for proper rounding
+        flame_height = max(2, min(4, flame_height))  # Range: 2-4 LEDs
+        state.flame_leds = flame_height
+        
+        for i in range(flame_height):
+            # Brightness tapers 50%: 1.0 at bottom to 0.5 at top
+            base_brightness = 1.0 - (i * 0.5 / max(1, flame_height - 1))
+            ripple_phase = (ripple_position - i * 4.5) % (BASE_FLAME_HEIGHT * 5)
+            ripple_variation = 0.12 * math.sin(ripple_phase * math.pi / (BASE_FLAME_HEIGHT * 2.5))
+            state.flame_led_brightness[i] = max(0.4, min(1.12, base_brightness + ripple_variation))
     
-    # Option 5: Double wave traveling upward - two waves offset
+    # Option 5: Double wave traveling upward - two smooth waves offset
     elif option == 5:
-        wave_speed = 0.18 * state.animation_speed
-        wave1_pos = (animated_frame * wave_speed + state.animation_phase_offset) % (num_leds * 2)
-        wave2_pos = (animated_frame * wave_speed + state.animation_phase_offset + num_leds) % (num_leds * 2)
-        for i in range(num_leds):
-            phase1 = (wave1_pos - i * 2) % (num_leds * 2)
-            phase2 = (wave2_pos - i * 2) % (num_leds * 2)
-            wave1 = 0.7 + 0.2 * math.sin(phase1 * math.pi / num_leds)
-            wave2 = 0.7 + 0.2 * math.sin(phase2 * math.pi / num_leds)
-            brightness_mult = (wave1 + wave2) / 2.0
-            state.flame_led_brightness[i] = max(0.6, min(1.3, brightness_mult))
+        wave_speed = 0.14 * state.animation_speed
+        wave1_pos = (animated_frame * wave_speed + state.animation_phase_offset) % (BASE_FLAME_HEIGHT * 2.5)
+        wave2_pos = (animated_frame * wave_speed + state.animation_phase_offset + BASE_FLAME_HEIGHT * 1.2) % (BASE_FLAME_HEIGHT * 2.5)
+        # Flame height varies with waves: base 3, can dip to 2 or rise to 4
+        height_wave = 1.0 * (math.sin(animated_frame * 0.12 + state.animation_phase_offset) + 
+                            math.sin(animated_frame * 0.12 + state.animation_phase_offset + math.pi / 2)) / 2.0
+        flame_height = int(BASE_FLAME_HEIGHT + height_wave + 0.5)  # +0.5 for proper rounding
+        flame_height = max(2, min(4, flame_height))  # Range: 2-4 LEDs
+        state.flame_leds = flame_height
+        
+        for i in range(flame_height):
+            # Brightness tapers 50%: 1.0 at bottom to 0.5 at top
+            base_brightness = 1.0 - (i * 0.5 / max(1, flame_height - 1))
+            phase1 = (wave1_pos - i * 2.2) % (BASE_FLAME_HEIGHT * 2.5)
+            phase2 = (wave2_pos - i * 2.2) % (BASE_FLAME_HEIGHT * 2.5)
+            wave1 = 0.1 * math.sin(phase1 * math.pi / (BASE_FLAME_HEIGHT * 1.25))
+            wave2 = 0.1 * math.sin(phase2 * math.pi / (BASE_FLAME_HEIGHT * 1.25))
+            state.flame_led_brightness[i] = max(0.4, min(1.1, base_brightness + (wave1 + wave2) / 2.0))
     
-    # Option 6: Chaotic upward flicker - random flicker traveling upward
+    # Option 6: Smooth chaotic flicker - multiple sine waves for natural randomness
     elif option == 6:
-        if not hasattr(state, '_chaos_frame'):
-            state._chaos_frame = 0
-        state._chaos_frame += 1
-        chaos_speed = 0.25 * state.animation_speed
-        for i in range(num_leds):
-            # Random component that moves upward
-            chaos_phase = (state._chaos_frame * chaos_speed - i * 2 + state.animation_phase_offset) % 10
-            random_val = (math.sin(chaos_phase) + math.sin(chaos_phase * 2.3) + math.sin(chaos_phase * 3.7)) / 3.0
-            brightness_mult = 0.7 + 0.3 * random_val
-            state.flame_led_brightness[i] = max(0.5, min(1.4, brightness_mult))
+        chaos_speed = 0.18 * state.animation_speed
+        # Flame height flickers chaotically: base 3, can dip to 2 or rise to 4
+        chaos_height_phase = (animated_frame * chaos_speed + state.animation_phase_offset) % 15
+        height_wave1 = 0.8 * math.sin(chaos_height_phase)
+        height_wave2 = 0.6 * math.sin(chaos_height_phase * 2.3)
+        height_variation = (height_wave1 + height_wave2) / 2.0
+        flame_height = int(BASE_FLAME_HEIGHT + height_variation + 0.5)  # +0.5 for proper rounding
+        flame_height = max(2, min(4, flame_height))  # Range: 2-4 LEDs
+        state.flame_leds = flame_height
+        
+        for i in range(flame_height):
+            # Brightness tapers 50%: 1.0 at bottom to 0.5 at top
+            base_brightness = 1.0 - (i * 0.5 / max(1, flame_height - 1))
+            chaos_phase = (animated_frame * chaos_speed - i * 2.5 + state.animation_phase_offset) % 12
+            wave1 = 0.08 * math.sin(chaos_phase)
+            wave2 = 0.06 * math.sin(chaos_phase * 2.1)
+            wave3 = 0.04 * math.sin(chaos_phase * 3.3)
+            flicker_variation = (wave1 + wave2 + wave3) / 3.0
+            state.flame_led_brightness[i] = max(0.4, min(1.15, base_brightness + flicker_variation))
     
-    # Option 7: Steady upward flow - continuous bright flow moving upward
+    # Option 7: Steady upward flow - smooth continuous flow moving upward
     elif option == 7:
-        flow_speed = 0.2 * state.animation_speed
-        flow_position = (animated_frame * flow_speed + state.animation_phase_offset) % (num_leds * 2)
-        for i in range(num_leds):
-            flow_phase = (flow_position - i * 2) % (num_leds * 2)
-            # Smooth gradient flow
-            if flow_phase < num_leds:
-                brightness_mult = 0.65 + 0.35 * (1.0 - flow_phase / num_leds)
+        flow_speed = 0.16 * state.animation_speed
+        flow_position = (animated_frame * flow_speed + state.animation_phase_offset) % (BASE_FLAME_HEIGHT * 2.5)
+        # Flame height flows upward: base 3, can dip to 2 or rise to 5
+        flow_height_phase = (animated_frame * flow_speed * 0.8 + state.animation_phase_offset) % (BASE_FLAME_HEIGHT * 3)
+        height_flow = 2.0 * math.sin(flow_height_phase * math.pi / (BASE_FLAME_HEIGHT * 1.5))
+        flame_height = int(BASE_FLAME_HEIGHT + height_flow + 0.5)  # +0.5 for proper rounding
+        flame_height = max(2, min(5, flame_height))  # Range: 2-5 LEDs
+        state.flame_leds = flame_height
+        
+        for i in range(flame_height):
+            # Brightness tapers 50%: 1.0 at bottom to 0.5 at top
+            base_brightness = 1.0 - (i * 0.5 / max(1, flame_height - 1))
+            flow_phase = (flow_position - i * 2.3) % (BASE_FLAME_HEIGHT * 2.5)
+            if flow_phase < BASE_FLAME_HEIGHT:
+                flow_boost = 0.15 * (0.5 + 0.5 * math.cos(flow_phase * math.pi / BASE_FLAME_HEIGHT))
             else:
-                brightness_mult = 0.65
-            state.flame_led_brightness[i] = max(0.6, min(1.3, brightness_mult))
+                flow_boost = 0.0
+            state.flame_led_brightness[i] = max(0.4, min(1.15, base_brightness + flow_boost))
     
-    # Option 8: Upward spiral effect - rotating brightness pattern
+    # Option 8: Upward spiral effect - smooth rotating brightness pattern
     elif option == 8:
-        spiral_speed = 0.22 * state.animation_speed
-        spiral_position = (animated_frame * spiral_speed + state.animation_phase_offset) % (num_leds * 3)
-        for i in range(num_leds):
-            spiral_phase = (spiral_position - i * 2.5) % (num_leds * 3)
-            brightness_mult = 0.7 + 0.3 * math.sin(spiral_phase * 2 * math.pi / (num_leds * 3))
-            state.flame_led_brightness[i] = max(0.6, min(1.3, brightness_mult))
+        spiral_speed = 0.15 * state.animation_speed
+        spiral_position = (animated_frame * spiral_speed + state.animation_phase_offset) % (BASE_FLAME_HEIGHT * 3.5)
+        # Flame height spirals: base 3, can dip to 2 or rise to 4
+        spiral_height_phase = (animated_frame * spiral_speed * 0.7 + state.animation_phase_offset) % (BASE_FLAME_HEIGHT * 4)
+        height_spiral = 1.0 * math.sin(spiral_height_phase * 2 * math.pi / (BASE_FLAME_HEIGHT * 4))
+        flame_height = int(BASE_FLAME_HEIGHT + height_spiral + 0.5)  # +0.5 for proper rounding
+        flame_height = max(2, min(4, flame_height))  # Range: 2-4 LEDs
+        state.flame_leds = flame_height
+        
+        for i in range(flame_height):
+            # Brightness tapers 50%: 1.0 at bottom to 0.5 at top
+            base_brightness = 1.0 - (i * 0.5 / max(1, flame_height - 1))
+            spiral_phase = (spiral_position - i * 2.8) % (BASE_FLAME_HEIGHT * 3.5)
+            spiral_variation = 0.15 * math.sin(spiral_phase * 2 * math.pi / (BASE_FLAME_HEIGHT * 3.5))
+            state.flame_led_brightness[i] = max(0.4, min(1.15, base_brightness + spiral_variation))
     
-    # Option 9: Complex multi-layer upward travel - multiple effects combined
+    # Option 9: Complex multi-layer - smooth combination of multiple effects
     elif option == 9:
         # Layer 1: Slow wave
-        wave1_speed = 0.1 * state.animation_speed
-        wave1_pos = (animated_frame * wave1_speed + state.animation_phase_offset) % (num_leds * 2)
-        # Layer 2: Fast pulse
-        wave2_speed = 0.35 * state.animation_speed
-        wave2_pos = (animated_frame * wave2_speed + state.animation_phase_offset * 1.5) % (num_leds * 3)
-        for i in range(num_leds):
-            phase1 = (wave1_pos - i * 2) % (num_leds * 2)
-            phase2 = (wave2_pos - i * 3) % (num_leds * 3)
-            layer1 = 0.7 + 0.15 * math.sin(phase1 * math.pi / num_leds)
-            layer2 = 0.7 + 0.2 * math.sin(phase2 * math.pi / (num_leds * 1.5))
-            brightness_mult = (layer1 + layer2) / 2.0
-            state.flame_led_brightness[i] = max(0.6, min(1.4, brightness_mult))
+        wave1_speed = 0.08 * state.animation_speed
+        wave1_pos = (animated_frame * wave1_speed + state.animation_phase_offset) % (BASE_FLAME_HEIGHT * 2.5)
+        # Layer 2: Medium pulse
+        wave2_speed = 0.22 * state.animation_speed
+        wave2_pos = (animated_frame * wave2_speed + state.animation_phase_offset * 1.5) % (BASE_FLAME_HEIGHT * 3.5)
+        # Flame height varies with both layers: base 3, can dip to 2 or rise to 5
+        height_layer1 = 1.2 * math.sin(animated_frame * wave1_speed * 0.5 + state.animation_phase_offset)
+        height_layer2 = 1.6 * math.sin(animated_frame * wave2_speed * 0.7 + state.animation_phase_offset * 1.5)
+        height_variation = (height_layer1 + height_layer2) / 2.0
+        flame_height = int(BASE_FLAME_HEIGHT + height_variation + 0.5)  # +0.5 for proper rounding
+        flame_height = max(2, min(5, flame_height))  # Range: 2-5 LEDs
+        state.flame_leds = flame_height
+        
+        for i in range(flame_height):
+            # Brightness tapers 50%: 1.0 at bottom to 0.5 at top
+            base_brightness = 1.0 - (i * 0.5 / max(1, flame_height - 1))
+            phase1 = (wave1_pos - i * 2.2) % (BASE_FLAME_HEIGHT * 2.5)
+            phase2 = (wave2_pos - i * 3.2) % (BASE_FLAME_HEIGHT * 3.5)
+            layer1 = 0.08 * math.sin(phase1 * math.pi / (BASE_FLAME_HEIGHT * 1.25))
+            layer2 = 0.1 * math.sin(phase2 * math.pi / (BASE_FLAME_HEIGHT * 1.75))
+            state.flame_led_brightness[i] = max(0.4, min(1.15, base_brightness + (layer1 + layer2) / 2.0))
 
 def update_menorah_strips(nights, brightness):
     """Light up the specified number of candles for the current night
@@ -749,18 +884,19 @@ def test_mode_init_all_candles():
     This function sets up all candles as lit and burning for testing animation options.
     """
     print("TEST MODE: Initializing all 9 candles (8 regular + shamash)")
-    print(f"All candles using Animation Option: {ANIMATION_OPTION}")
+    print(f"Test Mode: Each candle displays a different animation (1-9)")
+    print(f"Normal Mode: All candles use Animation Option: {ANIMATION_OPTION}")
     print("=" * 50)
-    print("Animation Options (set TEST_ANIMATION_OPTION to 1-9):")
-    print("1: Static flame (minimal animation, just color cycling)")
-    print("2: Simple brightness flicker (sine wave)")
-    print("3: Fast brightness flicker (sine wave, higher frequency)")
-    print("4: Slow, smooth brightness pulse (sine wave, low frequency)")
-    print("5: Random brightness flicker (per candle, smooth transitions)")
-    print("6: Flame size variation (sine wave)")
-    print("7: Combined brightness and size flicker (different frequencies)")
-    print("8: Per-candle phase offset (each candle flickers at different time)")
-    print("9: Complex multi-frequency flicker (multiple sine waves)")
+    print("Animation Options (base height: 3 LEDs, brightness tapers 50%, height varies 2-5 LEDs):")
+    print("1: Smooth upward wave - gentle sine wave traveling upward (height: 2-4 LEDs)")
+    print("2: Smooth upward pulse - gentle bright pulses traveling upward (height: 2-5 LEDs)")
+    print("3: Smooth random bursts - gentle bright spots moving upward (height: 2-4 LEDs)")
+    print("4: Smooth upward ripple - gentle wave with multiple peaks (height: 2-4 LEDs)")
+    print("5: Double wave traveling upward - two smooth waves offset (height: 2-4 LEDs)")
+    print("6: Smooth chaotic flicker - multiple sine waves for natural randomness (height: 2-4 LEDs)")
+    print("7: Steady upward flow - smooth continuous flow moving upward (height: 2-5 LEDs)")
+    print("8: Upward spiral effect - smooth rotating brightness pattern (height: 2-4 LEDs)")
+    print("9: Complex multi-layer - smooth combination of multiple effects (height: 2-5 LEDs)")
     print("=" * 50)
     
     current_time = time.monotonic()
