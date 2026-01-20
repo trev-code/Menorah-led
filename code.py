@@ -28,7 +28,7 @@ import math
 # Key settings - see line references for usage locations
 
 # Candle Burn Duration (~line 365-366, 722, 887)
-CANDLE_DURATION_MIN = 2  # Minutes (e.g., 45 for ~40 min runtime)
+CANDLE_DURATION_MIN = 40  # Minimum minutes (e.g., 40 for ~45 min runtime)
 CANDLE_DURATION_VARIATION = 0.10  # Random variation: min + random(0, variation) * min
 
 # Default Candle Color (~line 267, 287) - Format: (G, R, B, W) GRBW order
@@ -72,8 +72,8 @@ FLAME_MAX_LEDS = 5      # Maximum number of LEDs flame can grow to
 # ----------------------------------------------------------------
 
 # Test Mode Configuration (~line 401-402, 863, 913)
-TEST_MODE = True  # If True, skip to phase 3 with all 9 candles burning
-ANIMATION_OPTION = 6  # Animation option to test (1-9, see ~line 440-544 for animation definitions)
+TEST_MODE = False  # If True, skip to phase 3 with all 9 candles burning
+ANIMATION_OPTION = 3  # Animation option to test (1-9, see ~line 440-544 for animation definitions)
 
 # Phase 2 (Lighting) Configuration
 LIGHTING_GESTURE_TIMEOUT = 1.0  # Seconds between gesture and next candle
