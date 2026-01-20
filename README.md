@@ -47,7 +47,8 @@ This project models a “burn down” animation so the candles appear to melt do
 - Re-plug or press reset to start again.
 
 ---
-<img width="922" height="1444" alt="image" src="https://github.com/user-attachments/assets/dda85477-0583-4842-8c90-171026e9e0b2" />
+<img width="461" height="722" alt="image" src="https://github.com/user-attachments/assets/dda85477-0583-4842-8c90-171026e9e0b2" />
+
 ---
 ## Materials
 
