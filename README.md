@@ -46,11 +46,11 @@ This project models a “burn down” animation so the candles appear to melt do
 ## Materials
 
 ### Electronics
-- **Adafruit KB2040 / Keybow 2040** (or microcontroller with **≥9 GPIO** + **I2C**)
-- **9 × NeoPixel RGBW strips** (8 pixels per strip)
-- **APDS-9960 gesture/proximity sensor** breakout
+- **Adafruit KB2040 / Keybow 2040** (or microcontroller with **≥9 GPIO** + **I2C**) https://www.adafruit.com/product/5302
+- **9 × NeoPixel RGBW strips** (8 pixels per strip) https://www.adafruit.com/product/2867
+- **APDS-9960 gesture/proximity sensor** breakout https://www.adafruit.com/product/3595
 - Qwiic / STEMMA QT cable (or equivalent I2C wiring)
-- Protoboard (or small perfboard)
+- Protoboard (or small perfboard) https://www.adafruit.com/product/1608
 - Solid-core wire (20–24 AWG recommended)
 - USB-C cable + stable USB power
 
@@ -75,6 +75,13 @@ You will be building **9 independent NeoPixel outputs**:
 ### Board + strip mapping (as coded)
 Before you solder the microcontroller to the protoboard, solder the USB+RAW bridge on the underside of the KB2040.
 This will ensure the strips are safely pulling power directly from the USB port.
+<img width="1003" height="506" alt="image" src="https://github.com/user-attachments/assets/35d4a3bd-8384-4f44-819a-7759d51bc58c" />
+
+Next solder the microcontroller to the protoboard, ensuring the USB connector is towards the edge.
+Then wire RAW pin to the 5V rail of the protoboard and install a jumper to provide power to the other power rail.
+Tie Gnd pins to gnd rails of the protoboard.
+<img width="792" height="911" alt="image" src="https://github.com/user-attachments/assets/111e3f50-ef52-47af-ab24-7c2d03b21919" />
+
 The code expects the shamash on `D6`, and candles on these pins in *night order*:
 
 - **Shamash:** `D6`
@@ -87,11 +94,12 @@ The code expects the shamash on `D6`, and candles on these pins in *night order*
 - **Night 7:** `D8`
 - **Night 8:** `D9`
 
+<img width="1081" height="951" alt="image" src="https://github.com/user-attachments/assets/ff17f5de-0c20-46ce-b3d6-7112784d9697" />
+
+
 > This mapping is intentionally “physical-layout friendly” in the build, even if it looks non-sequential.
 
 ### Power & ground
-- Wire RAW pin to the 5V rail of the protoboard and install a jumper to provide power to the other side.
-- Tie Gnd pins to gnd rails of the protoboard.
 - Tie all strip **5V** together and all **GND** together on the protoboard.
 - Add power/ground jumpers as needed.
 - Trim and inspect underside wires so nothing shorts.
